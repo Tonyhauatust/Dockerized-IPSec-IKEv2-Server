@@ -107,6 +107,7 @@ Run to start the IPSec VPN server:
 sudo docker compose up IKEV2-server --detach
 ```
 </li>
+</ol>
 
 
 ## How to set up IKEv2 vpn for Android client.
