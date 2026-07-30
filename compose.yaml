@@ -1,0 +1,163 @@
+# IPSec-IKEv2-Server - A Dockerised IKEv2/IPSec VPN server with L2TP support.
+# Copyright (C) 2026  Tony HAU
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+include: 
+  - path:
+    - ./config/yaml/networks.yaml
+    - ./config/yaml/configs.yaml
+    - ./config/yaml/secrets.yaml
+
+services:
+  l2tp-server:
+    build:
+      context: .
+      dockerfile: ./Dockerfile/Dockerfile-l2tp-server
+    image: l2tp-server:stable-release-v1.1
+    volumes:
+      - type: bind
+        source: /tmp
+        target: /tmp
+      - type: bind
+        source: ./config/script/router-optimisation-code.sh
+        target: /router-optimisation-code.sh
+        read_only: true
+      - type: bind
+        source: ./config/l2tp-server/xl2tpd.conf
+        target: /etc/xl2tpd/xl2tpd.conf
+        read_only: true
+      - type: bind
+        source: ./script/start-server.sh
+        target: /start-server.sh
+        read_only: true
+      - type: bind
+        source: ./config/l2tp-server/ip-up
+        target: /etc/ppp/ip-up
+        read_only: true
+      - type: bind
+        source: ./config/l2tp-server/options.default_l2tp
+        target: /etc/ppp/options.default_l2tp
+        read_only: true
+    networks:
+      l2tp-server-network:
+        ipv4_address: 192.168.80.2
+        aliases: 
+          - l2tp-server
+    ports:
+      - "1701:1701/udp" # Exposes port 1701 to host network for L2TP
+    secrets:
+      - server-chap-secrets
+    command: /bin/bash -c "cp /run/secrets/server-chap-secrets /etc/ppp/chap-secrets && ./start-server.sh"
+    tty: true
+    stdin_open: true
+    privileged: true
+    restart: always
+
+
+  l2tp-router:
+    build:
+      context: .
+      dockerfile: ./Dockerfile/Dockerfile-l2tp-router
+    image: l2tp-router:stable-release-v1.1
+    volumes:
+      - type: bind
+        source: /tmp
+        target: /tmp
+      - type: bind
+        source: ./config/script/router-optimisation-code.sh
+        target: /router-optimisation-code.sh
+        read_only: true
+      - type: bind
+        source: ./config/l2tp-router/xl2tpd.conf
+        target: /xl2tpd.conf
+        read_only: true
+      - type: bind
+        source: ./script/start-router.sh
+        target: /start-router.sh
+        read_only: true
+      - type: bind
+        source: ./config/l2tp-router/ip-up
+        target: /ip-up
+        read_only: true
+      - type: bind
+        source: ./config/l2tp-router/ip-down
+        target: /ip-down
+        read_only: true
+      - type: bind
+        source: ./config/l2tp-router/options.default_l2tp.client
+        target: /options.default_l2tp.client
+        read_only: true
+      - type: bind
+        source: /tmp
+        target: /tmp
+    secrets:
+      - router-chap-secrets
+    command: > 
+          /bin/bash -c 
+          "cp /run/secrets/router-chap-secrets /etc/ppp/chap-secrets && 
+          cp /xl2tpd.conf /etc/xl2tpd/xl2tpd.conf && 
+          sed -i 's/<L2TP_SERVER_ADDR>/'"$$L2TP_SERVER_ADDR"'/' /etc/xl2tpd/xl2tpd.conf && 
+          cp /options.default_l2tp.client /etc/ppp/options.default_l2tp.client && 
+          sed -i 's/<L2TP_SERVER_ADDR>/'"$$L2TP_SERVER_ADDR"'/' /etc/ppp/options.default_l2tp.client && 
+          cp /ip-up /etc/ppp/ip-up &&
+          sed -i 's/<NETWORK_INTERFACE_TO_BE_FORWARDED>/'"$$NETWORK_INTERFACE_TO_BE_FORWARDED"'/' /etc/ppp/ip-up &&
+          cp /ip-down /etc/ppp/ip-down &&
+          sed -i 's/<NETWORK_INTERFACE_TO_BE_FORWARDED>/'"$$NETWORK_INTERFACE_TO_BE_FORWARDED"'/' /etc/ppp/ip-down && 
+          ./start-router.sh"
+          
+    network_mode: "host"
+    tty: true
+    environment:
+      L2TP_SERVER_ADDR: "203.0.113.1"
+      NETWORK_INTERFACE_TO_BE_FORWARDED: "enp87s0"
+    stop_signal: SIGINT
+    stdin_open: true
+    privileged: true
+    restart: always
+
+# Note that IKEV2 does not need L2TP.
+  IKEV2-server:
+    build:
+      context: .
+      dockerfile: ./Dockerfile/Dockerfile-ikev2-server
+    image: ikev2-server:stable-release-v1.1
+    volumes:
+      - type: bind
+        source: /tmp
+        target: /tmp
+      - type: bind
+        source: ./config/ikev2-server/ipsec.conf
+        target: /etc/ipsec.conf
+        read_only: true
+      - type: bind
+        source: ./script/ikev2-server-start.sh
+        target: /ikev2-server-start.sh
+        read_only: true
+    networks:
+      ipsec-server-network:
+        ipv4_address: 192.168.81.2
+        aliases: 
+          - ipsec-server
+    ports:
+      - "500:500/udp"
+      - "4500:4500/udp"
+    secrets:
+      - ipsec-server-secrets
+      - ipsec-server-cert
+      - ipsec-server-private-key
+    entrypoint: ["/bin/bash", "/ikev2-server-start.sh"]
+    stdin_open: true
+    privileged: true  
+    restart: always

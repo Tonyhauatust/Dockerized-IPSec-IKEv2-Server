@@ -1,0 +1,55 @@
+#!/bin/bash
+
+# IPSec-IKEv2-Server - A Dockerised IKEv2/IPSec VPN server with L2TP support.
+# Copyright (C) 2026  Tony HAU
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+#6th command is supplied via ipparam in pppd config file (i.e. options.default_l2tp.client)
+current_default_interface=$(ip route show default | awk '/default/ {print $5}')
+current_default_gateway=$(ip route show default | awk '/default/ {print $3}')
+pppd_remote_gateway=$5
+pppd_interface_name=$1
+L2TP_SERVER_ADDR=$6
+
+
+# Variables sanity check
+printf "$L2TP_SERVER_ADDR \n $current_default_interface \n $current_default_gateway \n $pppd_remote_gateway \n $pppd_interface_name \n <NETWORK_INTERFACE_TO_BE_FORWARDED>" > /tmp/l2tp-client-ip-up-vars-info
+
+# Save the current default route info
+printf "ip route add $(ip route show default)" > /tmp/l2tp-route-info
+
+# Route all traffic via ppp0 interface except for the L2TP server IP address
+# because this computer needs to maintain a connection to the L2TP server
+# no matter of what through normal interface
+
+#Note that the fifth and the first parameters of ip-up script is the remote-IP-address and the interface-name
+ip route add $L2TP_SERVER_ADDR via $current_default_gateway dev $current_default_interface
+ip route del default via $current_default_gateway dev $current_default_interface
+ip route add default via $pppd_remote_gateway dev $pppd_interface_name
+
+# Allow IP forwarding of packets that are not locally generated
+sysctl -w net.ipv4.ip_forward=1 2>/dev/null
+
+# Run router optimization script
+./router-optimisation-code.sh
+
+# Forward packets from the specified network interface to the ppp0 interface
+# As netfilter is a stateless firewall, allow traffic for already established connections
+iptables -A FORWARD -i <NETWORK_INTERFACE_TO_BE_FORWARDED> -o $pppd_interface_name -j ACCEPT
+iptables -A FORWARD -i <NETWORK_INTERFACE_TO_BE_FORWARDED> -o $pppd_interface_name -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+# SNAT the ppp0 interface
+iptables -t nat -A POSTROUTING -o $pppd_interface_name -j MASQUERADE
+
