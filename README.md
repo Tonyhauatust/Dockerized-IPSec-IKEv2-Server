@@ -381,7 +381,7 @@ Paste the ip address of the remote server to the environment variable L2TP_SERVE
 <li>
 Set up your username and password in router-chap-secrets and server-chap-secrets. Note that MSCHAP-V2 is bilateral authentication. So both the server and the router has to authenticate itself. Therefore, you need to store both <b>your username and password and the other side's username and password </b> in both router-chap-secrets and server-chap-secrets.
 </li>
-<ol>
+</ol>
 
 ## How to start the L2TP server
 Follow the steps in setting up a IKEv2 server above and start the L2TP-server. Remember to open the 1701 UDP port in security group.
