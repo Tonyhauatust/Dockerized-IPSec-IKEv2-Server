@@ -366,10 +366,25 @@ On the other hand, the L2TP client is in the form
 of a router that routes any traffic coming from its network interface (defined by the parameter NETWORK_INTERFACE_TO_BE_FORWARDED) to the remote VPN server so that any subnet attached to the interface can use the VPN service.
 </p>
 
-<p> To start the server and router, just start them
-in the compose.yaml. Note that for the router to work, 
-you need to set the network interface, i.e. NETWORK_INTERFACE_TO_BE_FORWARDED, to allocate ip address
-to the connected hosts. This can be set in LINUX network setting. <p>
+## How to start the L2TP router
+This project has only been tested on Ubuntu 24.04. To start this router, you need to
+<ol>
+<li>
+Choose the ethernet port on your local machine that you want to route the traffic. (For example the ethernet name can be eth0).
+</li>
+<li>
+Paste that name to the environment variable NETWORK_INTERFACE_TO_BE_FORWARDED of l2tp-router in compose.yaml in the project directory.
+</li>
+<li>
+Paste the ip address of the remote server to the environment variable L2TP_SERVER_ADDR of l2tp-router in compose.yaml in the project directory.
+</li>
+<li>
+Set up your username and password in router-chap-secrets and server-chap-secrets. Note that MSCHAP-V2 is bilateral authentication. So both the server and the router has to authenticate itself. Therefore, you need to store both <b>your username and password and the other side's username and password </b> in both router-chap-secrets and server-chap-secrets.
+</li>
+<ol>
+
+## How to start the L2TP server
+Follow the steps in setting up a IKEv2 server above and start the L2TP-server. Remember to open the 1701 UDP port in security group.
 
 <p> Note 1: The MTU and MRU of the L2TP client side should be set to 1460 because the
 MTU of the docker network adapter is set to 1500. (L2TP header is 40 byte) <p>
